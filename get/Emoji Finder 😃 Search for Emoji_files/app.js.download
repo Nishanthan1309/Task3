@@ -1,0 +1,479 @@
+var started = false;
+var current_fitz = 0;
+var current_gender = false;
+
+
+
+
+
+$(document).ready(function(){
+	
+
+	if(self!=top){
+		console.log('self is '+self);
+		alert("It looks like you’re loading Emoji Finder in an iframe.\n\nThat’s not cool.\n\nIf you are looking for a URL you can type to access this site please visit emojifinder.com. \n\nIf you have questions please contact @gmh on Twitter.");
+		top.window.location.href='https://emojifinder.com';
+	}
+
+	configure_events();
+	
+	if($.cookie('fitz') && $.cookie('fitz') != 'undefined'){
+		fitzify($.cookie('fitz'));
+	}else{
+		fitzify(current_fitz);
+	}
+	if($.cookie('gender') && $.cookie('gender') != 'undefined'){
+		console.log("setting gender from cookie"+$.cookie('gender'));
+		set_gender($.cookie('gender'));
+	}else{
+		set_gender(current_gender);
+	}		
+});
+		
+
+
+
+window.onpopstate = function(event) {
+ 
+ 	if(!started){
+	 	//ignore if it's from a page reload	
+	 	started = true;
+	 	return;
+ 	}
+	 
+	var keyword = document.location.pathname.substring(1);
+	keyword = keyword.replace("+", " ");
+	keyword = keyword.replace("/", " ");
+	keyword = decodeURI(keyword);
+	$('#search').val(keyword);
+
+	console.log('back to '+keyword);
+
+	$('#results').addClass('prepop');
+
+	$.ajax({
+		method: "GET",
+		url: "/*/ajax.php",
+		dataType: 'json',
+		data: { action: "search", query: keyword }
+	})
+	.done(function( ret ) {
+		var j = ret;
+		display_emoji(j.results, j.suggestions);
+	});
+	
+		 
+};
+
+
+var result_timer;
+var page_title_default = "Emoji Finder 😃 Search for Emoji";
+var instruct = '<div class="instruct">Type a word like <a href="/love">love</a> or <a href="/yeah">yeah</a> or <a href="/music">music</a> and we&#8217;ll show you matching emoji. Or enter an emoji and we&#8217;ll show you related ones.</div>';
+
+
+$("#search").keyup(function(){
+	console.log('keypress');
+	if($('#search').val() == ''){
+		$('#results').html(instruct);
+		document.title = page_title_default;
+		console.log('setting page title to '+page_title_default);	
+	}
+});
+
+
+$("#the_form").submit(function() {
+	
+	$('#results').addClass('prepop');
+
+	var keyword = $('#search').val();
+	var keyword_o = $('#search').val();
+	
+	/* Replace multi spaces with a single space */
+	keyword = keyword.replace(/\s{2,}/g,' ');
+
+	/* Replace slashes */
+	keyword = keyword.replace("/", "");
+
+	
+	/* Replace space with a '-' symbol */
+	keyword = keyword.replace(/\s/g, "+").toLowerCase();
+
+	
+	if(keyword == '*'){
+		keyword = "?q="+keyword;
+	}
+		
+	
+	var stateObj = { foo: "bar" };
+	history.pushState(false, "🔍 "+keyword_o+" on Emoji Finder", "/"+encodeURIComponent(keyword));
+
+
+	if(keyword.length == 0){
+		clearTimeout(result_timer);
+		result_timer = setTimeout(function(){
+				$('#results').html(instruct);
+				document.title = page_title_default;
+			}, 300);
+
+		return false;
+	}
+	
+	
+	
+	// forward to emoji domain if in safari
+	
+	var is_safari = navigator.userAgent.toLowerCase().indexOf('safari') > -1;
+	var is_chrome = navigator.userAgent.toLowerCase().indexOf('chrome') > -1;
+	var is_longurl = window.location.hostname.toLowerCase().indexOf('emojifinder') > -1;
+
+	console.log("is_safari:"+is_safari+" is_longurl:"+is_longurl+" UA:"+navigator.userAgent+" is_chrome:"+is_chrome);
+
+
+
+
+	//forward to 😃.tk/ if on a Mac
+	// if(is_chrome && !is_longurl){
+	// 	//chrome on emoji domain, forward to long domain
+	// 	var cleanUrl = "https://emojifinder.com/" + keyword;
+	// 	window.location = cleanUrl;		
+	// }else if (is_safari && !is_chrome && is_longurl){
+	// 	//is safari, but on long domain, so forward to emoji domain
+	// 	var cleanUrl = "https://😃.tk/" + keyword;
+	// 	window.location = cleanUrl;		
+	// 	
+	// }
+
+
+
+
+	
+	$('#spinner').addClass('show');
+	//do search
+	$.ajax({
+		method: "GET",
+		url: "/*/ajax.php",
+		dataType: 'json',
+		data: { action: "search", query: keyword }
+	}).done(function( ret ) {
+		var j = ret;
+		display_emoji(j.results, j.suggestions);
+	});
+		
+	$('#search').select();
+	return false;	
+
+
+	
+	
+});
+
+
+function correction(term){
+	$.ajax({
+		method: "GET",
+		url: "/*/ajax.php",
+		dataType: 'json',
+		data: { action: "record", type: "correction",  value: term}
+	})
+
+	$('#search').val(term);
+
+	setTimeout(function(term){
+		$("#the_form").submit();
+	}, 100);
+	
+}
+
+
+var last;
+
+var instacopied = false;
+
+function configure_events(){
+	$('#results input').click(function(){				
+		$(this).focus();
+		last = $(this);
+
+		console.log('clicked '+$(last).val());
+					
+		this.selectionStart=0;
+		this.selectionEnd=this.value.length;
+						
+		//reselect if auto-unselected
+		setTimeout(function(the_el){
+			the_el.selectionStart=0;
+			the_el.selectionEnd=the_el.value.length;
+		}, 1, this);
+
+
+		instacopied = true;
+		
+		//do the copying
+		setTimeout(function(the_el){
+			try {  
+			    var successful = document.execCommand('copy');  
+			    var msg = successful ? 'successful' : 'unsuccessful';  
+		   		
+		   		if(msg == 'successful'){
+				    console.log('Copy command was ' + msg);  
+			   		show_tooltip(the_el, 'Copied!');
+			   	}else{
+				    console.log('Copy command was ' + msg);  
+					show_tooltip(the_el, 'ready');				   	
+			   	}
+			} catch(err) {  
+	    		show_tooltip($(this), 'ready');
+			    console.log('Oops, unable to copy');  
+			}
+// 			instacopied = false;
+		}, 2, this);
+		
+		//remove tooltip if somehow unselected
+		setTimeout(function(the_el){			
+			var range = window.getSelection();                                        
+            var sel = (range.toString());
+			if(sel.length == 0){
+				hide_tooltip();
+			}
+		}, 3, this);
+		
+		
+		
+	}).bind('blur', function(){
+		hide_tooltip();
+		
+	}).bind('copy', function(){
+		var action_type = 'copy';
+		
+		if(instacopied){
+			action_type = 'instacopy';
+		}
+		
+		$.ajax({
+			method: "GET",
+			url: "/*/ajax.php",
+			dataType: 'json',
+			contentType: "application/x-www-form-urlencoded;charset=ISO-8859-15",
+			data: { action: "record", type: action_type,  value: $(this).val().toString()}
+		});
+		
+		instacopied = false;
+	
+	});	
+}
+
+
+
+function show_tooltip(el, msg){
+	//console.log(navigator.platform);
+
+	var offset = -50;
+	
+	if(msg == 'ready'){
+		if (/iPad|iPhone|iPod/.test(navigator.platform)) {
+			var msg = 'Tap Again!';
+			var offset = -50;
+		}else if (/Mac/.test(navigator.platform)) {
+			var msg = '<div class="butt">&#8984;</div><div class="butt">C</div> to Copy';
+			var offset = -20;
+		}else{
+			var msg = 'CTRL+C to Copy';
+			var offset = -20;
+		}	
+	}
+	
+	$('#tooltip').html(msg);
+	
+	var t_x = $(el).offset().left+ (($(el).outerWidth())/2) - $('#tooltip').outerWidth()/2;
+	var t_y = $(el).offset().top + offset; 
+	var t_w = $(el).outerWidth();
+
+	$('#tooltip').css({'top':t_y+'px', 'left':t_x+'px'});
+	
+}
+
+
+
+function hide_tooltip(){
+	$('#tooltip').css({'top':'-500px'});
+}
+
+
+
+function display_emoji(results, suggestions){
+	
+	$('#spinner').removeClass('show');
+
+	console.log('displaying results');
+	var showfitz = false;
+	var showgender = false;
+	
+	$('#results').html('');
+
+	if(results.length == 0){
+		document.title = page_title_default;
+
+		var sads = ['😕','😦','😖','😞','😢','😬'];
+		var saddy = sads[Math.floor(Math.random()*sads.length)];
+		console.log(suggestions);
+
+		if(suggestions.length > 0){
+			sugg = '';
+			for (i =  0; i < suggestions.length; ++i) {
+				var g = ', ';
+				if(i == suggestions.length-2){
+					g = ' or ';
+				}else if(i == suggestions.length-1){
+					g = '?';				
+				}
+				sugg += '<a href="javascript:correction(\''+suggestions[i]+'\');">'+suggestions[i]+'</a>'+g;
+			}
+			
+			suggs = ['Did you mean ','Maybe try something like ','Maybe you meant ','How about ','Try '];
+			sugg_pre = suggs[Math.floor(Math.random()*suggs.length)];
+
+			sugg = sugg_pre+sugg;
+			
+			$('#results').html('<div class="message"><span class="emoji">'+saddy+'</span><br/><strong>Hmm, no matches for that</strong>.<br/>'+sugg+'</div>');			
+		}else{
+			$('#results').html('<div class="message"><span class="emoji">'+saddy+'</span><br/><strong>No emoji found.</strong></div>');
+		}
+		return;
+	}
+	
+		var tite =  '😃 Emoji Finder search results';
+		document.title = tite;
+
+	var i;
+	for (i =  0; i < results.length; ++i) {
+	    //console.log(results[i]);
+	    var rank = results[i]['rank'];
+	    var emoji = results[i]['display_code'];
+	    var display_mode = results[i]['display_mode'];
+	    var fitz = results[i]['Fitz_Modified'];
+	    var gendered = results[i]['Gender_Modified'];
+	    var profession = results[i]['Profession'];
+	    var code = results[i]['Code'];
+
+		//expose controls for changing
+	    if(fitz != '0'){ showfitz = true; }
+	    if(gendered != '0'){ showgender = true;}
+
+		
+		$('#results').append('<input readonly id="result_'+rank+'" class="result" data-code="'+code+'" data-mode="'+display_mode+'" data-fitz="'+fitz+'" data-gender="'+gendered+'" data-profession="'+profession+'" data-clipboard-text="'+emoji+'" value="'+emoji+'"/>'); 		    
+	    
+	    
+	}	
+
+    update_modifiers();
+
+	if(showfitz == true){
+	    $('#fitz').show();
+	}else{
+	    $('#fitz').hide();
+	}
+
+	if(showgender == true){
+	    $('#gender').show();
+	}else{
+	    $('#gender').hide();
+	}
+		
+	setTimeout(function(){
+		$('#results').removeClass('prepop');
+	}, 1);
+			
+	configure_events();
+}
+
+
+
+function fitzify(color){
+	$.cookie('fitz', color, { expires: 36500, path: '/' });
+	current_fitz = color;		
+	update_modifiers();
+}
+
+
+function set_gender(g){
+	$.cookie('gender', g, { expires: 36500, path: '/' });
+	current_gender = g;
+	console.log("setting gender to "+g);
+	
+	if(g == 'false' || g == false){
+		g = '0';
+	}
+	
+	$('#gender .gender_select').removeClass('on');
+	$('#gender-'+g).addClass('on');
+	update_modifiers();
+}
+
+
+function update_modifiers(){
+	
+	if(current_fitz == 0){
+		var d_fitz = '';		
+		console.log("current_fitz:"+current_fitz);
+	}else{
+		var d_fitz = '&#x'+current_fitz+';';
+	}
+	
+	
+	if(current_gender == false){
+		var d_gender = '';
+	}else if (current_gender == 'm'){
+		var d_gender = '&#x200D;&#x2642;&#xFE0F;';
+	}else if (current_gender == 'f'){
+		var d_gender ='&#x200D;&#x2640;&#xFE0F;';		
+	}else{
+		var d_gender = '';		
+	}
+
+
+
+	$('#results input').each(function(){
+		
+		if($(this).attr('data-profession')==1){
+			//professions are zero-width joiner plus symbol in datbase
+			if(current_gender == 'f'){
+				var disp = '&#x1F469;'+d_fitz+$(this).attr('data-clipboard-text')+'&#xFE0F;';
+			}else if(current_gender == 'm'){
+				var disp = '&#x1F468;'+d_fitz+$(this).attr('data-clipboard-text')+'&#xFE0F;';
+			}else{
+				var disp = '&#x1F9D1;'+d_fitz+$(this).attr('data-clipboard-text')+'&#xFE0F;';				
+			}
+		}else if($(this).attr('data-fitz')==1 && $(this).attr('data-gender')==1){
+			if(d_fitz){
+				var disp = $(this).attr('data-clipboard-text')+d_fitz+d_gender;			
+			}else{
+				var disp = $(this).attr('data-clipboard-text')+d_gender;							
+			}
+		}else if($(this).attr('data-fitz')==1){
+			if(d_fitz){
+				var disp = $(this).attr('data-clipboard-text')+d_fitz;
+			}else{
+				var disp = $(this).attr('data-clipboard-text');
+			}
+		}else if($(this).attr('data-gender')==1){
+			var disp = $(this).attr('data-clipboard-text')+d_gender;
+		}else{
+			var disp = $(this).attr('data-clipboard-text');
+		}
+
+		if($(this).attr('data-mode')=="text"){
+			//console.log("emoji defaults to text");
+			disp = disp+'&#xFE0F;';
+		}
+		
+		$('#holder').html(disp);
+		$(this).val($('#holder').html());		
+		//console.log(disp);
+
+	});
+}
+
+
+function unicode_escape(code){
+	return  "\\u" +code;
+}
